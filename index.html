@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>أجندة المدير العام | جمعية البلاغ المبين</title>
+<meta name="description" content="نظام متابعة المهام والأعمال الخاصة بالمدير العام - جمعية البلاغ المبين الكويتية">
+<meta name="theme-color" content="#4a4058">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="أجندة المدير">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- شاشة البداية -->
+<div id="splash">
+  <img src="assets/logo.png" alt="شعار جمعية البلاغ المبين">
+  <div class="splash-title">أجندة المدير العام</div>
+  <div class="splash-bar"><span></span></div>
+</div>
+
+<div class="app">
+  <!-- الشريط الجانبي -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <img src="assets/logo.png" alt="الشعار" class="brand-logo">
+      <div class="brand-text">
+        <strong>أجندة المدير العام</strong>
+        <small>جمعية البلاغ المبين الكويتية</small>
+      </div>
+    </div>
+    <nav class="nav" id="nav">
+      <a data-view="dashboard" class="active"><span class="ico">📊</span><span>لوحة التحكم</span></a>
+      <a data-view="today"><span class="ico">📅</span><span>مهامي اليومية</span><b class="badge" id="bToday">0</b></a>
+      <a data-view="upcoming"><span class="ico">⏭️</span><span>المهام القادمة</span><b class="badge" id="bUpcoming">0</b></a>
+      <a data-view="overdue"><span class="ico">⚠️</span><span>المهام المتأخرة</span><b class="badge danger" id="bOverdue">0</b></a>
+      <a data-view="awaiting"><span class="ico">⏳</span><span>بانتظار إجراء</span><b class="badge warn" id="bAwaiting">0</b></a>
+      <a data-view="completed"><span class="ico">✅</span><span>المهام المكتملة</span><b class="badge ok" id="bCompleted">0</b></a>
+      <a data-view="reports"><span class="ico">📈</span><span>التقارير</span></a>
+      <a data-view="analysis"><span class="ico">🧮</span><span>تحليل الشيتات</span></a>
+      <a data-view="settings"><span class="ico">⚙️</span><span>الإعدادات والبنود</span></a>
+      <a data-view="guide"><span class="ico">📘</span><span>دليل الاستخدام</span></a>
+    </nav>
+    <div class="side-foot">
+      <div id="clock" class="clock"></div>
+      <div id="dateNow" class="date-now"></div>
+    </div>
+  </aside>
+  <div class="overlay" id="overlay"></div>
+
+  <!-- المحتوى -->
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="القائمة">☰</button>
+      <h1 id="viewTitle">لوحة التحكم</h1>
+      <div class="top-actions">
+        <input type="search" id="globalSearch" placeholder="🔍 بحث في المهام...">
+        <button class="icon-btn" id="bellBtn" title="التنبيهات">🔔<i id="bellDot"></i></button>
+        <button class="btn primary" id="addTaskBtn">＋ مهمة جديدة</button>
+      </div>
+    </header>
+
+    <!-- التنبيه الإداري -->
+    <div class="admin-alert" id="adminAlert">
+      <div class="aa-icon">📢</div>
+      <div class="aa-text">
+        <strong>تنبيه إداري:</strong> راجع المهام المتأخرة يوميًا، وحدّث حالة الأعمال التي تم إنجازها أو تأجيلها.
+        <span id="aaCounts"></span>
+      </div>
+      <button class="btn small light" id="aaReview">مراجعة المتأخرة</button>
+      <button class="icon-btn small" id="aaClose" title="إخفاء لليوم">✕</button>
+    </div>
+
+    <!-- ========== لوحة التحكم ========== -->
+    <section class="view active" id="view-dashboard">
+      <div class="hero">
+        <div class="hero-content">
+          <h2 id="greeting">مرحبًا بك</h2>
+          <p id="heroSub">ملخص شامل لجميع مهام وأعمال المدير العام</p>
+        </div>
+        <div class="hero-ring">
+          <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fg" id="ringFg"/></svg>
+          <div class="ring-val"><b id="ringVal">0%</b><small>نسبة الإنجاز</small></div>
+        </div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div class="charts-grid" id="dashCharts">
+        <div class="chart-card"><h3>توزيع المهام حسب الحالة</h3><div class="cw"><canvas id="cStatus"></canvas></div></div>
+        <div class="chart-card"><h3>المهام حسب التصنيف</h3><div class="cw"><canvas id="cCategory"></canvas></div></div>
+        <div class="chart-card"><h3>المهام حسب الأولوية</h3><div class="cw"><canvas id="cPriority"></canvas></div></div>
+        <div class="chart-card"><h3>بانتظار إجراء من</h3><div class="cw"><canvas id="cAwaiting"></canvas></div></div>
+        <div class="chart-card wide"><h3>الإنجاز خلال آخر 14 يومًا</h3><div class="cw"><canvas id="cTrend"></canvas></div></div>
+        <div class="chart-card"><h3>نسبة الإنجاز لكل تصنيف</h3><div class="cw"><canvas id="cCatRate"></canvas></div></div>
+      </div>
+      <div class="two-col">
+        <div class="panel"><h3>⚠️ أهم المهام المتأخرة</h3><div id="dashOverdue" class="mini-list"></div></div>
+        <div class="panel"><h3>⏳ متابعات بانتظار إجراء</h3><div id="dashAwaiting" class="mini-list"></div></div>
+      </div>
+    </section>
+
+    <!-- ========== قوائم المهام ========== -->
+    <section class="view" id="view-tasks">
+      <div class="list-head">
+        <div class="list-intro" id="listIntro"></div>
+        <div class="filters">
+          <select id="fCategory"><option value="">كل التصنيفات</option></select>
+          <select id="fPriority"><option value="">كل الأولويات</option></select>
+          <select id="fStatus"><option value="">كل الحالات</option></select>
+          <select id="fAwaiting"><option value="">بانتظار إجراء من (الكل)</option></select>
+          <select id="fSort">
+            <option value="date">ترتيب: حسب الموعد</option>
+            <option value="priority">ترتيب: حسب الأولوية</option>
+            <option value="created">ترتيب: الأحدث إضافة</option>
+          </select>
+        </div>
+      </div>
+      <div class="task-list" id="taskList"></div>
+    </section>
+
+    <!-- ========== التقارير ========== -->
+    <section class="view" id="view-reports">
+      <div class="seg" id="reportSeg">
+        <button data-r="day" class="active">يومي</button>
+        <button data-r="week">أسبوعي</button>
+        <button data-r="month">شهري</button>
+      </div>
+      <div class="report-period" id="reportPeriod"></div>
+      <div class="kpis" id="reportKpis"></div>
+      <div class="charts-grid">
+        <div class="chart-card wide"><h3>المنجز مقابل المضاف خلال الفترة</h3><div class="cw"><canvas id="rTrend"></canvas></div></div>
+        <div class="chart-card"><h3>المنجز حسب التصنيف</h3><div class="cw"><canvas id="rCat"></canvas></div></div>
+        <div class="chart-card"><h3>حالة مهام الفترة</h3><div class="cw"><canvas id="rStatus"></canvas></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>📋 تفاصيل التقرير</h3>
+          <div><button class="btn small" id="printReport">🖨️ طباعة</button> <button class="btn small accent" id="exportReport">⬇️ تصدير Excel</button></div>
+        </div>
+        <div class="table-wrap"><table class="table" id="reportTable"></table></div>
+      </div>
+    </section>
+
+    <!-- ========== تحليل الشيتات ========== -->
+    <section class="view" id="view-analysis">
+      <div class="upload-zone" id="dropZone">
+        <div class="uz-icon">📂</div>
+        <h3>ارفع ملف Excel أو CSV ليتم تحليله تلقائيًا</h3>
+        <p>يدعم ملفات <b>.xlsx</b> و <b>.xls</b> و <b>.csv</b> — ويتعرف على الأعمدة العربية (التصنيف، الحالة، الأولوية، التاريخ، بانتظار إجراء من ...)</p>
+        <div class="uz-actions">
+          <label class="btn primary">اختيار ملف<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden></label>
+          <button class="btn accent" id="analyzeTasksBtn">تحليل مهام النظام الحالية</button>
+          <button class="btn" id="templateBtn">⬇️ تنزيل قالب Excel</button>
+        </div>
+        <small>أو اسحب الملف وأفلته هنا</small>
+      </div>
+      <div id="analysisOut" class="hidden">
+        <div class="panel">
+          <div class="panel-head">
+            <h3 id="anTitle">نتائج التحليل</h3>
+            <div class="an-actions">
+              <select id="anSheet" class="hidden"></select>
+              <button class="btn small accent hidden" id="importAsTasks">📥 استيراد كمهام في النظام</button>
+              <button class="btn small" id="anReset">🔄 مسح الفلاتر</button>
+            </div>
+          </div>
+          <div class="col-chips" id="colChips"></div>
+          <div class="filters an-filters" id="anFilters"></div>
+        </div>
+        <div class="kpis" id="anKpis"></div>
+        <div class="charts-grid" id="anCharts"></div>
+        <div class="panel">
+          <div class="panel-head"><h3>📄 البيانات بعد التصفية <small id="anRowsInfo"></small></h3>
+            <button class="btn small accent" id="anExport">⬇️ تصدير المصفّى</button></div>
+          <div class="table-wrap"><table class="table" id="anTable"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== الإعدادات ========== -->
+    <section class="view" id="view-settings">
+      <div class="settings-grid">
+        <div class="panel">
+          <h3>🔔 التنبيهات والتذكير</h3>
+          <label class="switch-row"><span>تفعيل إشعارات المتصفح / الهاتف</span><input type="checkbox" id="sNotify"><i class="sw"></i></label>
+          <label class="switch-row"><span>تشغيل صوت التنبيه</span><input type="checkbox" id="sSound"><i class="sw"></i></label>
+          <label class="field-row"><span>وقت التذكير اليومي بالمهام</span><input type="time" id="sDailyTime"></label>
+          <label class="field-row"><span>التذكير قبل موعد المهمة بـ (دقيقة)</span><input type="number" id="sLead" min="0" max="240"></label>
+          <div class="row-btns">
+            <button class="btn" id="testNotify">🔔 تجربة الإشعار والصوت</button>
+          </div>
+          <p class="hint" id="notifyState"></p>
+        </div>
+
+        <div class="panel">
+          <h3>👤 بيانات عامة</h3>
+          <label class="field-row"><span>اسم المدير العام</span><input type="text" id="sName" placeholder="مثال: أ. محمد"></label>
+          <label class="field-row"><span>اسم الجهة</span><input type="text" id="sOrg"></label>
+          <div class="row-btns">
+            <button class="btn primary" id="saveGeneral">💾 حفظ</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>🗂️ التصنيفات</h3>
+          <div class="item-list" id="catList"></div>
+          <div class="add-row">
+            <input type="text" id="newCatName" placeholder="اسم التصنيف">
+            <input type="text" id="newCatDesc" placeholder="الوصف">
+            <input type="color" id="newCatColor" value="#8b7aa8">
+            <button class="btn accent" id="addCat">＋ إضافة</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>⏳ جهات «بانتظار إجراء من»</h3>
+          <div class="item-list" id="awList"></div>
+          <div class="add-row">
+            <input type="text" id="newAw" placeholder="اسم الجهة (مثال: الشؤون المالية)">
+            <button class="btn accent" id="addAw">＋ إضافة</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>🧩 بنود وحقول إضافية للمهمة</h3>
+          <p class="hint">أضف أي بند جديد مستقبلًا (رقم الكتاب، الميزانية، المسؤول...) وسيظهر تلقائيًا في نموذج المهمة وفي التصدير والتحليل.</p>
+          <div class="item-list" id="cfList"></div>
+          <div class="add-row">
+            <input type="text" id="newCfLabel" placeholder="اسم البند">
+            <select id="newCfType">
+              <option value="text">نص</option><option value="number">رقم</option>
+              <option value="date">تاريخ</option><option value="select">قائمة اختيار</option>
+            </select>
+            <input type="text" id="newCfOpts" placeholder="الخيارات مفصولة بفاصلة (للقائمة)">
+            <button class="btn accent" id="addCf">＋ إضافة</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>🎯 الأولويات والحالات</h3>
+          <p class="hint">يمكنك إضافة أولوية أو حالة جديدة. الحالة «مكتملة» أساسية ولا يمكن حذفها.</p>
+          <h4>الأولويات</h4>
+          <div class="item-list" id="prList"></div>
+          <div class="add-row"><input type="text" id="newPr" placeholder="أولوية جديدة"><button class="btn accent" id="addPr">＋</button></div>
+          <h4>الحالات</h4>
+          <div class="item-list" id="stList"></div>
+          <div class="add-row"><input type="text" id="newSt" placeholder="حالة جديدة"><button class="btn accent" id="addSt">＋</button></div>
+        </div>
+
+        <div class="panel full">
+          <h3>💾 حفظ البيانات ونقلها لجهاز آخر — خطوة بخطوة</h3>
+          <div class="save-mode">
+            <div class="sm-card rec">
+              <span class="tag">موصى به ✔</span>
+              <h4>الحفظ على الجهاز</h4>
+              <p>تُحفظ البيانات تلقائيًا داخل المتصفح على هذا الجهاز فور أي تعديل، ولا تُرسل لأي خادم — خصوصية كاملة وتعمل دون إنترنت.</p>
+              <div class="storage-info" id="storageInfo"></div>
+            </div>
+          </div>
+          <div class="steps">
+            <div class="step"><b>1</b><h4>تصدير نسخة احتياطية</h4><p>اضغط «تنزيل نسخة احتياطية» ليتم حفظ ملف <code>.json</code> يحتوي على جميع المهام والإعدادات.</p><button class="btn primary" id="backupBtn">⬇️ تنزيل نسخة احتياطية</button></div>
+            <div class="step"><b>2</b><h4>انقل الملف</h4><p>انقل الملف إلى الجهاز الآخر عبر: فلاش USB، البريد الإلكتروني، واتساب، أو Google Drive / OneDrive.</p></div>
+            <div class="step"><b>3</b><h4>افتح التطبيق على الجهاز الآخر</h4><p>افتح نفس التطبيق (الكمبيوتر أو الهاتف) ثم ادخل إلى «الإعدادات والبنود».</p></div>
+            <div class="step"><b>4</b><h4>استعادة النسخة</h4><p>اضغط «استعادة نسخة احتياطية» واختر الملف. يمكنك الاستبدال الكامل أو الدمج مع الموجود.</p>
+              <label class="btn accent">⬆️ استعادة نسخة احتياطية<input type="file" id="restoreInput" accept=".json" hidden></label></div>
+            <div class="step"><b>5</b><h4>نسخ دوري</h4><p>ننصح بتنزيل نسخة احتياطية أسبوعيًا. سيذكّرك النظام إذا مرّ أكثر من 7 أيام.</p><p class="hint" id="lastBackup"></p></div>
+          </div>
+          <div class="row-btns">
+            <button class="btn" id="exportXlsx">📊 تصدير جميع المهام Excel</button>
+            <label class="btn">📥 استيراد مهام من Excel/CSV<input type="file" id="importXlsx" accept=".xlsx,.xls,.csv" hidden></label>
+            <button class="btn" id="loadDemo">🧪 تحميل بيانات تجريبية</button>
+            <button class="btn danger" id="clearAll">🗑️ مسح جميع البيانات</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== دليل الاستخدام ========== -->
+    <section class="view" id="view-guide">
+      <div class="guide" id="guideContent">
+        <div class="guide-head">
+          <img src="assets/logo.png" alt="">
+          <h2>دليل استخدام أجندة المدير العام</h2>
+          <p>نظام متابعة المهام والأعمال الخاصة بالمدير العام — جمعية البلاغ المبين الكويتية</p>
+          <button class="btn small" onclick="window.print()">🖨️ طباعة الدليل</button>
+        </div>
+        <div class="guide-grid">
+          <article><h3>1️⃣ البدء السريع</h3><ol>
+            <li>افتح الملف <code>index.html</code> في المتصفح (Chrome أو Edge مفضل).</li>
+            <li>اضغط زر <b>«＋ مهمة جديدة»</b> أعلى الشاشة.</li>
+            <li>اكتب عنوان المهمة واختر التصنيف والأولوية والتاريخ والوقت.</li>
+            <li>عند الحاجة حدّد <b>«بانتظار إجراء من»</b> لتسجيل الجهة التي تنتظر ردها.</li>
+            <li>اضغط <b>«حفظ المهمة»</b> — تُحفظ تلقائيًا على الجهاز.</li></ol></article>
+          <article><h3>2️⃣ الواجهات الرئيسية</h3><ul>
+            <li><b>لوحة التحكم:</b> مؤشرات ورسوم بيانية لجميع المهام.</li>
+            <li><b>مهامي اليومية:</b> مهام اليوم فقط.</li>
+            <li><b>المهام القادمة:</b> المجدولة للأيام القادمة.</li>
+            <li><b>المهام المتأخرة:</b> التي تجاوزت موعدها ولم تُنجز.</li>
+            <li><b>بانتظار إجراء:</b> المعاملات المعلّقة لدى جهة أخرى.</li>
+            <li><b>المهام المكتملة:</b> أرشيف الأعمال المنجزة.</li>
+            <li><b>التقارير:</b> ملخص يومي وأسبوعي وشهري قابل للطباعة والتصدير.</li></ul></article>
+          <article><h3>3️⃣ إدارة المهمة</h3><ul>
+            <li>✔ <b>إنجاز:</b> ينقل المهمة إلى الأرشيف مع تسجيل وقت الإنجاز.</li>
+            <li>⏩ <b>تأجيل:</b> يؤجل المهمة ليوم أو أسبوع أو تاريخ تختاره، ويحسب عدد مرات التأجيل.</li>
+            <li>✏️ <b>تعديل</b> و 🗑️ <b>حذف</b>.</li>
+            <li>ضع ملاحظاتك في حقل «الملاحظات» لكل مهمة.</li></ul></article>
+          <article><h3>4️⃣ التنبيهات (إشعار + صوت)</h3><ol>
+            <li>من «الإعدادات» فعّل <b>الإشعارات</b> ووافق على طلب المتصفح.</li>
+            <li>فعّل <b>الصوت</b> وحدد وقت التذكير اليومي.</li>
+            <li>عند إضافة مهمة بوقت محدد فعّل «تذكير بموعد المهمة».</li>
+            <li>يجب أن يبقى التطبيق مفتوحًا (ولو في الخلفية) لتعمل التنبيهات.</li></ol></article>
+          <article><h3>5️⃣ تحليل الشيتات</h3><ol>
+            <li>ادخل «تحليل الشيتات» وارفع ملف <b>xlsx</b> أو <b>csv</b>.</li>
+            <li>يتعرف النظام على نوع كل عمود (تصنيف / رقم / تاريخ / نص) ويقرأ الأسماء العربية.</li>
+            <li>تظهر مؤشرات و<b>10 رسوم بيانية</b> مختلفة تلقائيًا.</li>
+            <li>استخدم الفلاتر لتصفية البيانات وستتحدث الرسوم فورًا.</li>
+            <li>يمكنك استيراد بيانات الشيت كمهام داخل النظام.</li></ol></article>
+          <article><h3>6️⃣ الإعدادات والبنود</h3><ul>
+            <li>إضافة / تعديل / حذف <b>التصنيفات</b>.</li>
+            <li>إضافة جهات <b>«بانتظار إجراء من»</b>.</li>
+            <li>إضافة <b>بنود وحقول جديدة</b> للمهمة مستقبلًا (نص، رقم، تاريخ، قائمة).</li>
+            <li>إضافة أولويات وحالات جديدة.</li></ul></article>
+          <article><h3>7️⃣ النسخ الاحتياطي والنقل</h3><ol>
+            <li>الإعدادات ← «تنزيل نسخة احتياطية».</li>
+            <li>انقل ملف JSON للجهاز الآخر.</li>
+            <li>افتح التطبيق هناك ← «استعادة نسخة احتياطية».</li>
+            <li>اختر «استبدال» أو «دمج».</li></ol></article>
+          <article><h3>8️⃣ استخدامه على الهاتف</h3><ul>
+            <li>ارفع مجلد التطبيق على استضافة (مثل موقع الجمعية أو GitHub Pages أو Netlify).</li>
+            <li>افتح الرابط من الهاتف ← قائمة المتصفح ← <b>«إضافة إلى الشاشة الرئيسية»</b>.</li>
+            <li>سيعمل كتطبيق مستقل بأيقونة الجمعية وحتى بدون إنترنت.</li>
+            <li>لنقل بياناتك من الكمبيوتر استخدم النسخة الاحتياطية.</li></ul></article>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- شريط التنقل للهاتف -->
+<nav class="bottom-nav" id="bottomNav">
+  <a data-view="dashboard" class="active"><span>📊</span>الرئيسية</a>
+  <a data-view="today"><span>📅</span>اليوم</a>
+  <a class="fab" id="fabAdd"><span>＋</span></a>
+  <a data-view="overdue"><span>⚠️</span>المتأخرة</a>
+  <a data-view="reports"><span>📈</span>التقارير</a>
+</nav>
+
+<!-- نافذة المهمة -->
+<div class="modal" id="taskModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="taskModalTitle">مهمة جديدة</h3>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+    <form id="taskForm" autocomplete="off">
+      <input type="hidden" id="tId">
+      <label class="full">عنوان المهمة *<input type="text" id="tTitle" required placeholder="مثال: اعتماد صرف مشروع كفالة الأيتام"></label>
+      <label>التصنيف<select id="tCategory"></select></label>
+      <label>الأولوية<select id="tPriority"></select></label>
+      <label>التاريخ *<input type="date" id="tDate" required></label>
+      <label>الوقت<input type="time" id="tTime"></label>
+      <label>الحالة<select id="tStatus"></select></label>
+      <label>بانتظار إجراء من<select id="tAwaiting"></select></label>
+      <label class="full">تفاصيل الانتظار / رقم المعاملة<input type="text" id="tAwaitingNote" placeholder="مثال: كتاب رقم 125 - بانتظار توقيع الرئيس"></label>
+      <div class="full custom-fields" id="tCustom"></div>
+      <label class="full">ملاحظات<textarea id="tNotes" rows="3" placeholder="أي ملاحظات إضافية..."></textarea></label>
+      <label class="check full"><input type="checkbox" id="tReminder" checked> تذكير بموعد المهمة (إشعار + صوت)</label>
+      <div class="modal-foot full">
+        <button type="button" class="btn" data-close>إلغاء</button>
+        <button type="submit" class="btn primary">💾 حفظ المهمة</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- نافذة التأجيل -->
+<div class="modal" id="postponeModal">
+  <div class="modal-box small">
+    <div class="modal-head"><h3>⏩ تأجيل المهمة</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="pp-body">
+      <div class="pp-quick">
+        <button class="btn" data-days="1">غدًا</button>
+        <button class="btn" data-days="3">بعد 3 أيام</button>
+        <button class="btn" data-days="7">بعد أسبوع</button>
+      </div>
+      <label>أو اختر تاريخًا<input type="date" id="ppDate"></label>
+      <label>سبب التأجيل (اختياري)<input type="text" id="ppReason"></label>
+      <div class="modal-foot"><button class="btn" data-close>إلغاء</button><button class="btn primary" id="ppSave">تأكيد التأجيل</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة تأكيد عامة -->
+<div class="modal" id="confirmModal">
+  <div class="modal-box small">
+    <div class="modal-head"><h3 id="cfTitle">تأكيد</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="pp-body"><p id="cfMsg" class="center-text"></p>
+      <div class="modal-foot" id="cfBtns"></div></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="lib/chart.umd.min.js"></script>
+<script src="lib/xlsx.full.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
