@@ -42,14 +42,153 @@ function load() {
   try { s = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { s = null; }
   if (!s || typeof s !== 'object') s = { tasks: [], settings: defaultSettings(), seeded: false };
   s.tasks = Array.isArray(s.tasks) ? s.tasks : [];
+  s.deleted = s.deleted && typeof s.deleted === 'object' ? s.deleted : {};
   s.settings = Object.assign(defaultSettings(), s.settings || {});
   if (!s.settings.statuses.includes(DONE)) s.settings.statuses.push(DONE);
   return s;
 }
-function save() {
+function persist() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
   catch (e) { toast('تعذر الحفظ على الجهاز — قد تكون مساحة التخزين ممتلئة', 'err'); }
+}
+function save() {
+  const changed = stamp();
+  persist();
   updateBadges();
+  if (changed && sync.enabled) { sync.dirty = true; saveSync(); scheduleSync(2500); }
+}
+
+/* ---------- المزامنة بين الأجهزة (Google Sheets) ---------- */
+const SYNC_KEY = 'albalagh_sync_v1';
+const DEVICE_KEYS = ['notify', 'sound', 'dailyTime', 'lead', 'lastDaily', 'alertHidden', 'lastBackup', 'backupNag', 'updatedAt'];
+let sync = loadSync();
+let snap = {}, setSnap = '', syncing = false, syncTimer = null;
+function loadSync() {
+  let s = null; try { s = JSON.parse(localStorage.getItem(SYNC_KEY)); } catch (e) {}
+  return Object.assign({url: '', key: '', enabled: false, dirty: false, lastSync: '', lastError: ''}, s || {});
+}
+function saveSync() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch (e) {} }
+function taskSig(t) { const c = Object.assign({}, t); delete c.notified; delete c.updatedAt; return JSON.stringify(c); }
+function sharedSettings(s) { const o = {}; Object.keys(s).forEach(k => { if (!DEVICE_KEYS.includes(k)) o[k] = s[k]; }); return o; }
+function initSnap() {
+  snap = {}; state.tasks.forEach(t => { snap[t.id] = taskSig(t); });
+  setSnap = JSON.stringify(sharedSettings(state.settings));
+}
+/* يسجّل وقت آخر تعديل لكل مهمة، ويسجّل المحذوفات حتى تُحذف من الأجهزة الأخرى */
+function stamp() {
+  const now = new Date().toISOString(); let changed = false; const ids = new Set();
+  state.deleted = state.deleted || {};
+  state.tasks.forEach(t => { ids.add(t.id); const s = taskSig(t); if (snap[t.id] !== s) { t.updatedAt = now; snap[t.id] = s; changed = true; } });
+  Object.keys(snap).forEach(id => { if (!ids.has(id)) { state.deleted[id] = now; delete snap[id]; changed = true; } });
+  const ss = JSON.stringify(sharedSettings(state.settings));
+  if (ss !== setSnap) { state.settings.updatedAt = now; setSnap = ss; changed = true; }
+  return changed;
+}
+function syncPayload() {
+  return {
+    tasks: state.tasks.map(t => { const c = Object.assign({}, t); delete c.notified; return c; }),
+    deleted: state.deleted || {},
+    settings: Object.assign(sharedSettings(state.settings), {updatedAt: state.settings.updatedAt || ''})
+  };
+}
+function mergeTasks(a, b) {
+  const del = Object.assign({}, a.deleted || {});
+  Object.entries(b.deleted || {}).forEach(([id, ts]) => { if (!del[id] || ts > del[id]) del[id] = ts; });
+  const map = new Map();
+  (a.tasks || []).forEach(t => map.set(t.id, t));
+  (b.tasks || []).forEach(t => { const x = map.get(t.id); if (!x || (t.updatedAt || '') > (x.updatedAt || '')) map.set(t.id, t); });
+  const tasks = [...map.values()].filter(t => !(del[t.id] && del[t.id] >= (t.updatedAt || '')));
+  const cutoff = new Date(Date.now() - 90 * 864e5).toISOString();
+  Object.keys(del).forEach(id => { if (del[id] < cutoff) delete del[id]; });
+  return {tasks, deleted: del};
+}
+function applyRemoteSettings(rs) {
+  const dev = {}; DEVICE_KEYS.forEach(k => { if (k !== 'updatedAt' && k in state.settings) dev[k] = state.settings[k]; });
+  state.settings = Object.assign(defaultSettings(), rs, dev, {updatedAt: rs.updatedAt || ''});
+  if (!state.settings.statuses.includes(DONE)) state.settings.statuses.push(DONE);
+}
+function applyRemote(remote) {
+  if (!remote) return;
+  if (stamp()) sync.dirty = true;
+  const before = JSON.stringify([state.tasks, sharedSettings(state.settings)]);
+  const notified = {}; state.tasks.forEach(t => { if (t.notified) notified[t.id] = t.notified; });
+  const m = mergeTasks(syncPayload(), {tasks: remote.tasks || [], deleted: remote.deleted || {}});
+  state.tasks = m.tasks.map(t => notified[t.id] ? Object.assign({}, t, {notified: notified[t.id]}) : t);
+  state.deleted = m.deleted;
+  if (remote.settings && (remote.settings.updatedAt || '') > (state.settings.updatedAt || '')) applyRemoteSettings(remote.settings);
+  initSnap(); persist();
+  if (before !== JSON.stringify([state.tasks, sharedSettings(state.settings)])) { fillFilterSelects(); render(); }
+}
+async function callServer(action, data, cfg) {
+  cfg = cfg || sync;
+  let res;
+  try { res = await fetch(cfg.url, {method: 'POST', body: JSON.stringify({key: cfg.key, action, data})}); }
+  catch (e) { throw new Error('تعذر الاتصال بالخادم — تحقق من الرابط والإنترنت'); }
+  const txt = await res.text(); let j;
+  try { j = JSON.parse(txt); } catch (e) { throw new Error('الرابط لا يعمل كخادم مزامنة — تأكد من النشر بخيار «أي شخص» (Anyone) ومن نسخ رابط Web App الصحيح'); }
+  if (!j.ok) throw new Error({unauthorized: 'الرمز السري غير صحيح', secret_not_set: 'لم يتم تغيير الرمز السري داخل كود الخادم', busy: 'الخادم مشغول، ستُعاد المحاولة', bad_request: 'طلب غير صالح'}[j.error] || 'خطأ من الخادم');
+  return j;
+}
+function scheduleSync(ms) { if (!sync.enabled) return; clearTimeout(syncTimer); syncTimer = setTimeout(doSync, ms); }
+async function doSync() {
+  if (!sync.enabled || !sync.url || syncing) return;
+  if (!navigator.onLine) { setSyncStatus('offline'); return; }
+  syncing = true; setSyncStatus('syncing');
+  if (stamp()) { sync.dirty = true; persist(); }
+  const wasDirty = sync.dirty; sync.dirty = false; saveSync();
+  try {
+    const r = await callServer(wasDirty ? 'sync' : 'pull', wasDirty ? syncPayload() : null);
+    applyRemote(r.data);
+    sync.lastSync = new Date().toISOString(); sync.lastError = '';
+    setSyncStatus('ok');
+  } catch (e) {
+    sync.dirty = sync.dirty || wasDirty; sync.lastError = e.message; setSyncStatus('error');
+  }
+  saveSync(); syncing = false;
+  if (sync.dirty) scheduleSync(4000);
+}
+function setSyncStatus(st) {
+  const b = $('#syncBtn'); if (!b) return;
+  const t = sync.lastSync ? new Date(sync.lastSync).toLocaleTimeString(LOC, {hour: '2-digit', minute: '2-digit'}) : '';
+  const map = {
+    off: ['☁️', 'غير مربوط — اضغط للربط بين الجوال والكمبيوتر', 'المزامنة غير مفعلة على هذا الجهاز'],
+    syncing: ['🔄', 'جارٍ المزامنة...', '🔄 جارٍ المزامنة...'],
+    ok: ['✅', 'تمت المزامنة ' + t, '✅ مربوط — آخر مزامنة الساعة ' + t],
+    error: ['⚠️', sync.lastError, '⚠️ ' + sync.lastError],
+    offline: ['📴', 'لا يوجد إنترنت — سيتم الرفع تلقائيًا عند الاتصال', '📴 بدون إنترنت — التعديلات محفوظة على الجهاز وسترفع عند الاتصال']
+  };
+  const [ico, title, txt] = map[st] || map.off;
+  b.textContent = ico; b.title = title; b.className = 'icon-btn sync-' + st;
+  const s = $('#syncStatus'); if (s) { s.textContent = txt; s.className = 'sync-status sync-' + st; }
+}
+const encodeLink = (u, k) => 'ALB1.' + btoa(unescape(encodeURIComponent(JSON.stringify({u, k}))));
+function decodeLink(code) {
+  try { const o = JSON.parse(decodeURIComponent(escape(atob(code.trim().replace(/^ALB1\./, ''))))); return o.u && o.k ? {url: o.u, key: o.k} : null; } catch (e) { return null; }
+}
+async function connectSync() {
+  let url = $('#syUrl').value.trim(), key = $('#syKey').value.trim();
+  const code = $('#syCode').value.trim();
+  if (code) { const d = decodeLink(code); if (!d) return toast('رمز الربط غير صحيح', 'err'); url = d.url; key = d.key; }
+  if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) return toast('الصق رابط Web App من Google Apps Script (يبدأ بـ https://script.google.com)', 'err');
+  if (!key) return toast('اكتب الرمز السري', 'err');
+  const cfg = {url, key};
+  setSyncStatus('syncing');
+  let r; try { r = await callServer('pull', null, cfg); } catch (e) { sync.lastError = e.message; setSyncStatus('error'); return toast(e.message, 'err'); }
+  const remote = r.data || {};
+  const finish = (dirty) => {
+    Object.assign(sync, {url, key, enabled: true, dirty, lastError: ''}); saveSync();
+    $('#syCode').value = ''; renderSettings(); doSync();
+  };
+  if (!(remote.tasks || []).length && !remote.settings) { finish(true); return toast('تم الربط ✔ — جارٍ رفع بيانات هذا الجهاز', 'ok'); }
+  confirmBox('🔗 تم الاتصال بالخادم', `يوجد في السحابة ${remote.tasks.length} مهمة. ماذا تريد أن تفعل ببيانات هذا الجهاز (${state.tasks.length} مهمة)؟`, [
+    {text: '☁️ استخدام بيانات السحابة', cls: 'primary', fn: () => {
+      state.tasks = remote.tasks || []; state.deleted = remote.deleted || {}; state.seeded = true;
+      if (remote.settings) applyRemoteSettings(remote.settings);
+      initSnap(); persist(); fillFilterSelects(); render(); finish(false); toast('تم الربط ✔ — أصبحت بيانات هذا الجهاز مطابقة للسحابة', 'ok');
+    }},
+    {text: '🔀 دمج بيانات الجهازين', cls: 'accent', fn: () => { finish(true); toast('تم الربط ✔ — جارٍ دمج البيانات', 'ok'); }},
+    {text: 'إلغاء'}
+  ]);
 }
 
 /* ---------- أدوات ---------- */
@@ -791,7 +930,10 @@ function renderSettings() {
   $('#cfList').innerHTML = S.customFields.length ? S.customFields.map(f => `<div class="item"><div class="i-txt"><b>${esc(f.label)}</b><small>${{text: 'نص', number: 'رقم', date: 'تاريخ', select: 'قائمة: ' + (f.options || []).join('، ')}[f.type]}</small></div><button class="icon-btn small" data-cfdel="${f.id}">🗑️</button></div>`).join('') : '<p class="hint">لا توجد بنود إضافية بعد</p>';
   let bytes = 0; try { bytes = (localStorage.getItem(STORE_KEY) || '').length * 2; } catch (e) {}
   $('#storageInfo').textContent = `📦 ${state.tasks.length} مهمة محفوظة — الحجم ${(bytes / 1024).toFixed(1)} كيلوبايت`;
-  $('#lastBackup').textContent = S.lastBackup ? 'آخر نسخة احتياطية: ' + fmtDate(S.lastBackup) : 'لم يتم أخذ نسخة احتياطية بعد';
+  $('#syUrl').value = sync.url || ''; $('#syKey').value = sync.key || '';
+  $('#syncPanel').classList.toggle('linked', !!sync.enabled);
+  setSyncStatus(sync.enabled ? (sync.lastError ? 'error' : navigator.onLine ? 'ok' : 'offline') : 'off');
+  $('#lastBackup').textContent =S.lastBackup ? 'آخر نسخة احتياطية: ' + fmtDate(S.lastBackup) : 'لم يتم أخذ نسخة احتياطية بعد';
 }
 function settingsClick(e) {
   const S = state.settings, d = e.target.closest('button')?.dataset; if (!d) return;
@@ -1008,6 +1150,25 @@ function bind() {
   $('#addPr').onclick = addSimple('#newPr', 'priorities', 'تمت إضافة الأولوية ✔');
   $('#addSt').onclick = addSimple('#newSt', 'statuses', 'تمت إضافة الحالة ✔');
   $('#addCf').onclick = () => { const l = $('#newCfLabel').value.trim(); if (!l) return toast('اكتب اسم البند', 'err'); const type = $('#newCfType').value; const options = $('#newCfOpts').value.split(/[,،]/).map(s => s.trim()).filter(Boolean); if (type === 'select' && !options.length) return toast('أدخل خيارات القائمة', 'err'); state.settings.customFields.push({id: uid(), label: l, type, options}); $('#newCfLabel').value = $('#newCfOpts').value = ''; save(); renderSettings(); toast('تمت إضافة البند — سيظهر في نموذج المهمة ✔', 'ok'); };
+  // الربط والمزامنة
+  $('#syncBtn').onclick = () => { if (sync.enabled) { doSync(); toast(sync.lastError ? sync.lastError : 'جارٍ المزامنة...'); } else { go('settings'); setTimeout(() => $('#syncPanel').scrollIntoView({behavior: 'smooth'}), 400); } };
+  $('#syConnect').onclick = connectSync;
+  $('#syNow').onclick = () => { if (!sync.enabled) return toast('اربط الجهاز أولًا', 'err'); doSync(); };
+  $('#syCopy').onclick = async () => {
+    if (!sync.enabled) return toast('اربط هذا الجهاز أولًا', 'err');
+    const code = encodeLink(sync.url, sync.key);
+    try { await navigator.clipboard.writeText(code); toast('تم نسخ رمز الربط ✔ أرسله لنفسك والصقه في الجهاز الآخر', 'ok'); }
+    catch (e) { $('#syCode').value = code; $('#syCode').select(); toast('انسخ الرمز الظاهر في الخانة', 'ok'); }
+  };
+  $('#syOff').onclick = () => confirmBox('إلغاء الربط', 'سيتوقف هذا الجهاز عن المزامنة، وتبقى بياناته محفوظة عليه.', [{text: 'تراجع'}, {text: 'إلغاء الربط', cls: 'danger', fn: () => { sync.enabled = false; sync.key = ''; sync.dirty = false; saveSync(); setSyncStatus('off'); renderSettings(); toast('تم إلغاء الربط'); }}]);
+  $('#syShowKey').onclick = () => { const i = $('#syKey'); i.type = i.type === 'password' ? 'text' : 'password'; };
+  $('#syCopyCode').onclick = async () => {
+    let code = '';
+    try { code = await (await fetch('google-apps-script/Code.gs', {cache: 'no-store'})).text(); } catch (e) {}
+    if (!code || !code.includes('doPost')) return toast('افتح الملف google-apps-script/Code.gs من مجلد البرنامج وانسخ محتواه', 'err');
+    try { await navigator.clipboard.writeText(code); toast('تم نسخ كود الخادم ✔ الصقه في Apps Script', 'ok'); }
+    catch (e) { download('Code.gs', code, 'text/plain'); }
+  };
   $('#backupBtn').onclick = backup;
   $('#restoreInput').onchange = e => { const f = e.target.files[0]; if (f) restore(f); e.target.value = ''; };
   $('#exportXlsx').onclick = () => exportXlsx(taskRows(state.tasks), `جميع-المهام-${today()}.xlsx`);
@@ -1028,12 +1189,20 @@ function tick() {
 /* ---------- التشغيل ---------- */
 function init() {
   chartSetup();
+  initSnap();
   if (!state.seeded) { state.tasks = state.tasks.length ? state.tasks : demoTasks(); state.seeded = true; save(); setTimeout(() => toast('👋 تم تحميل بيانات تجريبية للاستعراض — يمكنك مسحها من الإعدادات'), 2200); }
   bind(); fillFilterSelects(); tick(); setInterval(tick, 15000);
   let lastDay = today();
   setInterval(() => { checkReminders(); if (today() !== lastDay) { lastDay = today(); render(); } }, 30000);
   go('dashboard');
   setTimeout(() => { document.body.classList.add('loaded'); checkReminders(); }, 1500);
+  // المزامنة: عند الفتح، كل 45 ثانية، عند العودة للتطبيق، وعند رجوع الإنترنت
+  setSyncStatus(sync.enabled ? (navigator.onLine ? 'ok' : 'offline') : 'off');
+  if (sync.enabled) setTimeout(doSync, 1800);
+  setInterval(() => { if (sync.enabled && document.visibilityState === 'visible') doSync(); }, 45000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') doSync(); });
+  window.addEventListener('online', () => doSync());
+  window.addEventListener('offline', () => { if (sync.enabled) setSyncStatus('offline'); });
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

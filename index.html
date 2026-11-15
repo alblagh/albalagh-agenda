@@ -60,6 +60,7 @@
       <h1 id="viewTitle">لوحة التحكم</h1>
       <div class="top-actions">
         <input type="search" id="globalSearch" placeholder="🔍 بحث في المهام...">
+        <button class="icon-btn" id="syncBtn" title="المزامنة">☁️</button>
         <button class="icon-btn" id="bellBtn" title="التنبيهات">🔔<i id="bellDot"></i></button>
         <button class="btn primary" id="addTaskBtn">＋ مهمة جديدة</button>
       </div>
@@ -183,6 +184,43 @@
     <!-- ========== الإعدادات ========== -->
     <section class="view" id="view-settings">
       <div class="settings-grid">
+        <div class="panel full" id="syncPanel">
+          <h3>🔗 ربط الجوال والكمبيوتر (مزامنة تلقائية)</h3>
+          <p class="hint">بعد الربط، أي مهمة تضيفها أو تعدّلها على أي جهاز تظهر على الجهاز الآخر خلال ثوانٍ. البيانات تُحفظ في جدول Google خاص بحسابك أنت فقط، ويستمر التطبيق بالعمل بدون إنترنت ويرفع التعديلات عند عودة الاتصال.</p>
+          <div class="sync-status" id="syncStatus"></div>
+          <div class="sync-grid">
+            <div class="sync-box">
+              <h4>الجهاز الأول (الكمبيوتر)</h4>
+              <label class="field-row col"><span>رابط خادم المزامنة (Web App URL)</span><input type="url" id="syUrl" dir="ltr" placeholder="https://script.google.com/macros/s/.../exec"></label>
+              <label class="field-row col"><span>الرمز السري</span><span class="pw"><input type="password" id="syKey" dir="ltr" autocomplete="off"><button type="button" class="icon-btn small" id="syShowKey" title="إظهار">👁️</button></span></label>
+            </div>
+            <div class="sync-box">
+              <h4>الجهاز الثاني (الجوال)</h4>
+              <label class="field-row col"><span>الصق «رمز الربط» المنسوخ من الجهاز الأول</span><input type="text" id="syCode" dir="ltr" placeholder="ALB1...."></label>
+              <p class="hint">رمز الربط يحتوي على الرابط والرمز السري معًا — لا ترسله لأي شخص آخر.</p>
+            </div>
+          </div>
+          <div class="row-btns">
+            <button class="btn primary" id="syConnect">🔗 ربط واختبار</button>
+            <button class="btn accent" id="syNow">🔄 مزامنة الآن</button>
+            <button class="btn" id="syCopy">📋 نسخ رمز الربط للجهاز الآخر</button>
+            <button class="btn danger" id="syOff">⛓️‍💥 إلغاء الربط</button>
+          </div>
+          <details class="sync-help">
+            <summary>📖 خطوات إنشاء خادم المزامنة (مرة واحدة فقط — 5 دقائق)</summary>
+            <div class="steps">
+              <div class="step"><b>1</b><h4>جدول Google جديد</h4><p>افتح <code>sheets.new</code> من الكمبيوتر بحساب Google، وسمِّ الجدول «أجندة المدير - مزامنة».</p></div>
+              <div class="step"><b>2</b><h4>افتح Apps Script</h4><p>من القائمة: <b>الإضافات ← Apps Script</b> (Extensions ← Apps Script).</p></div>
+              <div class="step"><b>3</b><h4>الصق الكود</h4><p>احذف الكود الموجود والصق كود الخادم.</p><button class="btn small accent" id="syCopyCode">📋 نسخ كود الخادم</button></div>
+              <div class="step"><b>4</b><h4>غيّر الرمز السري</h4><p>في السطر <code>const SECRET</code> ضع رمزًا خاصًا بك بين علامتي التنصيص، ثم اضغط 💾 حفظ.</p></div>
+              <div class="step"><b>5</b><h4>انشر كتطبيق ويب</h4><p><b>نشر ← نشر جديد</b> ← ⚙️ <b>تطبيق ويب</b>. التنفيذ باسم: <b>أنا</b>. من يمكنه الوصول: <b>أي شخص</b>. ثم <b>نشر</b>.</p></div>
+              <div class="step"><b>6</b><h4>امنح الإذن</h4><p>اختر حسابك ← <b>Advanced / خيارات متقدمة</b> ← <b>Go to ... (unsafe)</b> ← <b>Allow</b>. (هذا الكود ملكك أنت).</p></div>
+              <div class="step"><b>7</b><h4>اربط الكمبيوتر</h4><p>انسخ <b>رابط تطبيق الويب</b> (ينتهي بـ <code>/exec</code>) والصقه هنا مع الرمز السري ثم «ربط واختبار».</p></div>
+              <div class="step"><b>8</b><h4>اربط الجوال</h4><p>اضغط «نسخ رمز الربط» وأرسله لنفسك بالواتساب، ثم في الجوال الصقه في خانة الجهاز الثاني ← «ربط» ← «استخدام بيانات السحابة».</p></div>
+            </div>
+          </details>
+        </div>
+
         <div class="panel">
           <h3>🔔 التنبيهات والتذكير</h3>
           <label class="switch-row"><span>تفعيل إشعارات المتصفح / الهاتف</span><input type="checkbox" id="sNotify"><i class="sw"></i></label>
@@ -332,7 +370,14 @@
             <li>ارفع مجلد التطبيق على استضافة (مثل موقع الجمعية أو GitHub Pages أو Netlify).</li>
             <li>افتح الرابط من الهاتف ← قائمة المتصفح ← <b>«إضافة إلى الشاشة الرئيسية»</b>.</li>
             <li>سيعمل كتطبيق مستقل بأيقونة الجمعية وحتى بدون إنترنت.</li>
-            <li>لنقل بياناتك من الكمبيوتر استخدم النسخة الاحتياطية.</li></ul></article>
+            <li>لربط بياناته مع الكمبيوتر تلقائيًا استخدم «ربط الجوال والكمبيوتر».</li></ul></article>
+          <article><h3>9️⃣ ربط الجوال والكمبيوتر</h3><ol>
+            <li>أنشئ خادم المزامنة مرة واحدة (جدول Google + Apps Script) حسب الخطوات في الإعدادات.</li>
+            <li>على الكمبيوتر: الصق الرابط والرمز السري ← «ربط واختبار».</li>
+            <li>اضغط «نسخ رمز الربط» وأرسله لنفسك.</li>
+            <li>على الجوال: الإعدادات ← الصق الرمز ← «ربط» ← «استخدام بيانات السحابة».</li>
+            <li>أيقونة ☁️ أعلى الشاشة تبين الحالة: ✅ متزامن، 🔄 جارٍ، 📴 بدون إنترنت، ⚠️ خطأ.</li>
+            <li>يمكنك الاطلاع على المهام أيضًا من ورقة «المهام» داخل جدول Google.</li></ol></article>
         </div>
       </div>
     </section>
