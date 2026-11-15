@@ -56,6 +56,7 @@ body.loaded #splash{opacity:0;visibility:hidden}
 .side-foot{padding:16px;text-align:center;border-top:1px solid rgba(255,255,255,.1)}
 .clock{font-size:1.7rem;font-weight:900;letter-spacing:1px;color:var(--accent)}
 .date-now{font-size:.88rem;opacity:.8}
+.app-ver{margin-top:6px;font-size:.78rem;color:var(--accent-l);opacity:.85}
 .overlay{display:none}
 
 .main{flex:1;margin-right:var(--sidebar);padding:0 28px 40px;min-width:0}
